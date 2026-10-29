@@ -1,0 +1,43 @@
+# ══════════════════════════════════════════════════════════════
+#  部署注意事項（踩過的坑，請勿隨意改回鎖死版本）
+# ══════════════════════════════════════════════════════════════
+# ① Python 版本：建議 3.11（wheel 覆蓋最完整）
+#    ★ Streamlit Community Cloud【不讀 runtime.txt】——那是 Heroku/Render
+#      的慣例。它的 Python 版本要在【部署時的 Advanced settings】選，
+#      或部署後到 App settings 改再 Reboot。
+#    本檔的版本範圍已放寬到 3.11~3.14 都能解，但 3.14 上部分套件
+#    可能需要編譯（較慢）。若安裝卡在 `xxx.tar.gz` 就是這個原因。
+#
+# ② 版本用【範圍】而非 ==，讓解析器自行找相容組合。
+#    先前鎖 numpy==2.1.3 與 catboost==1.2.7（該版需 numpy<2.0）
+#    直接衝突 → uv 報 "No solution found"。
+#
+# ③ catboost 需 >=1.2.8 才支援 numpy 2.x（已實測 1.2.10 + numpy 2.4 可用）。
+# ══════════════════════════════════════════════════════════════
+
+streamlit>=1.37,<2
+pandas>=2.0,<3
+numpy>=1.24,<3
+plotly>=5.18,<7
+pyarrow>=14
+openpyxl>=3.1
+
+# ── 模型反序列化所需 ──
+# scikit-learn 需與訓練端（1.6.1）相近，差太多會有 unpickle 相容性警告。
+# 涵蓋 Ridge / ENet / RF / GB / SVR / Stacking 全部 sklearn 系模型。
+scikit-learn>=1.5,<2
+joblib>=1.3
+
+# ── 三個 booster：全部納入，不依當前模型檔精簡 ──
+# 理由：v6.6 的 MODEL_ZOO 與各機制都可能選中它們，重訓後組合會變：
+#   MODEL_ZOO      CatB* → catboost、LGBM* → lightgbm、XGB* → xgboost
+#   [5] 兩階段      catboost / lightgbm / xgboost 三選一（逐分段裁決）
+#   [6] MTL 後端    ridge / lightgbm / catboost（取 <2MPa% 最佳）
+#   Stack_MAE      內含 catboost + xgboost + svr + gb
+# 少裝任何一個，重訓後只要被選中就會 ModuleNotFoundError（且是在
+# 載入 pkl 時整個 app 掛掉，不是預測時才失敗）。
+# 三個加起來約 +180 MB 安裝體積、部署多約 1 分鐘 —— 用這點成本換
+# 「換模型不必改 requirements」是值得的。
+catboost>=1.2.8,<2
+lightgbm>=4.0,<5
+xgboost>=2.0,<4
